@@ -10,6 +10,7 @@ plugins {
 android {
     namespace = "io.flutter.examples.hello_world"
     compileSdk = flutter.compileSdkVersion
+    ndkVersion = "27.0.12077973"
 
     // Flutter's CI installs the NDK at a non-standard path.
     // This non-standard structure is initially created by
@@ -40,15 +41,9 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-
-    buildscript {
-    dependencies {
-        classpath 'com.google.gms:google-services:4.4.1' 
-    }
-}
-
 }
 
 flutter {
     source = "../.."
 }
+
