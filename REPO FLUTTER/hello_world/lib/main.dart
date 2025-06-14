@@ -1,6 +1,4 @@
-// Copyright 2014 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:hello_world/login/screen/forgot_password_screen.dart';
@@ -8,10 +6,12 @@ import 'package:hello_world/login/widgets/auth_wrapper.dart';
 import 'package:hello_world/sensor_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
 import 'firebase_options.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:hello_world/login/services/auth_service.dart';
 import 'package:hello_world/login/screen/register_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 
 
@@ -32,15 +32,16 @@ class InvernaderoApp extends StatelessWidget {
       title: 'Invernadero Inteligente',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.green,
-        fontFamily: 'NotoSans', // ← Aquí agregas la fuente
-      ),
-      home: const AuthWrapper(),
+                        textTheme: GoogleFonts.poppinsTextTheme(),
+                        primarySwatch: Colors.green,
+                      ),
+      initialRoute: '/',
       routes: {
         '/register': (context) => const RegisterScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/detalle': (context) => const CultivoDetailScreen(),
+        '/control': (context) => const ControlScreen()
       },
     );
   }
@@ -254,14 +255,7 @@ class DashboardScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.settings),
             onPressed: () {},
-          ),
-          IconButton(icon: const Icon(Icons.logout),
-          onPressed: () async {
-            await AuthService().signOut();
-            if (context.mounted) {
-              Navigator.pushReplacementNamed(context, '/');
-            }
-          })
+          )
         ],
       ),
       body: Padding(
@@ -299,33 +293,31 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                                 Expanded(
-                  child: ListView(
-                    children: [
-                      buildLineChart(getSpots(readings, 'Temperatura'), getTimestamps(readings, 'Temperatura'), 'Historial de Temperatura', 30),
-                      buildLineChart(getSpots(readings, 'Humedad'), getTimestamps(readings, 'Humedad'), 'Historial de Humedad', 80),
-                    ],
-                  ),
-                ),
+                                          child: ListView(
+                                            children: [
+                                              buildStyledLineChart(
+                                                spots: getSpots(readings, 'Temperatura'),
+                                                labels: getTimestamps(readings, 'Temperatura', onlyHour: true),
+                                                title: 'Historial de Temperatura',
+                                                maxLimit: 30,
+                                                color: Colors.orange,
+                                              ),
+                                              buildStyledLineChart(
+                                                spots: getSpots(readings, 'Humedad'),
+                                                labels: getTimestamps(readings, 'Humedad', onlyHour: true),
+                                                title: 'Historial de Humedad',
+                                                maxLimit: 80,
+                                                color: Colors.blue,
+                                              ),
+                                            ],
+                                          ),
+                                        )
               ],
             );
           },
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        selectedItemColor: Colors.green,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.info), label: 'Detalle'),
-        ],
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.pushNamed(context, '/dashboard');
-          } else if (index == 1) {
-            Navigator.pushNamed(context, '/detalle');
-          }
-        },
-      ),
+      bottomNavigationBar: buildBottomNavBar(context, 0),
     );
   }
 }
@@ -346,39 +338,55 @@ class SensorGauge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isWithinLimit = value <= max;
     final percentage = (value / max).clamp(0.0, 1.0);
-    final isAlert = value > max;
+    final color = isWithinLimit ? Colors.green : Colors.red;
 
-    return Column(
-      children: [
-        SizedBox(
-          width: 100,
-          height: 100,
-          child: PieChart(
-            PieChartData(
-              sections: [
-                PieChartSectionData(
-                  value: percentage * 100,
-                  color: isAlert ? Colors.red : Colors.yellow,
-                  radius: 40,
-                  title: '${value.toStringAsFixed(1)}$unit',
-                  titleStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 100,
+                height: 100,
+                child: CircularProgressIndicator(
+                  value: percentage,
+                  strokeWidth: 10,
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                  backgroundColor: Colors.grey.shade200,
                 ),
-                PieChartSectionData(
-                  value: (1 - percentage) * 100,
-                  color: Colors.grey.shade200,
-                  radius: 40,
-                  title: '',
-                ),
-              ],
-              centerSpaceRadius: 0,
-              sectionsSpace: 0,
-            ),
+              ),
+              Column(
+                children: [
+                  Icon(
+                    isWithinLimit ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+                    color: color,
+                    size: 28,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${value.toStringAsFixed(1)} $unit',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: color),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-      ],
+          const SizedBox(height: 10),
+          Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        ],
+      ),
     );
   }
 }
@@ -425,21 +433,7 @@ class CultivoDetailScreen extends StatelessWidget {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        selectedItemColor: Colors.green,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.info), label: 'Detalle'),
-        ],
-        onTap: (index) {
-          if (index == 0) {
-            Navigator.pushNamed(context, '/dashboard');
-          } else if (index == 1) {
-            Navigator.pushNamed(context, '/detalle');
-          }
-        },
-      ),
+      bottomNavigationBar: buildBottomNavBar(context, 1),
     );
   }
 }
@@ -501,79 +495,502 @@ List<FlSpot> getSpots(List<SensorReading> readings, String type) {
   });
 }
 
-List<String> getTimestamps(List<SensorReading> readings, String type) {
+List<String> getTimestamps(List<SensorReading> readings, String type, {bool onlyHour = false}) {
   return readings
       .where((r) => r.sensor.contains(type))
       .take(10)
-      .map((r) => r.timestamp)
+      .map((r) {
+        final dateTime = DateTime.tryParse(r.timestamp);
+        if (dateTime == null) return '';
+        return onlyHour ? '${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}' : r.timestamp;
+      })
       .toList();
 }
 
-Widget buildLineChart(List<FlSpot> spots, List<String> labels, String title, double maxLimit) {
-  return Card(
-    margin: const EdgeInsets.symmetric(vertical: 12),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 200,
-            child: LineChart(
-              LineChartData(
-                lineBarsData: [
-                  LineChartBarData(
-                    isCurved: true,
-                    spots: spots,
-                    color: Colors.green,
-                    barWidth: 3,
-                    dotData: FlDotData(show: true),
+
+Widget buildSmoothTemperatureChart(List<FlSpot> spots, List<String> timestamps) {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    margin: const EdgeInsets.symmetric(vertical: 8),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 4)),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Historial de Temperatura',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 200,
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(show: false),
+              titlesData: FlTitlesData(
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 1,
+                    getTitlesWidget: (value, meta) {
+                      final index = value.toInt();
+                      if (index >= 0 && index < timestamps.length) {
+                        return Text(
+                          timestamps[index],
+                          style: const TextStyle(fontSize: 10),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
                   ),
-                ],
-                extraLinesData: ExtraLinesData(horizontalLines: [
-                  HorizontalLine(
-                    y: maxLimit,
-                    color: Colors.red,
-                    strokeWidth: 2,
-                    dashArray: [5, 5],
-                    label: HorizontalLineLabel(
-                      show: true,
-                      alignment: Alignment.centerRight,
-                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                      labelResolver: (_) => 'Límite: $maxLimit',
-                    ),
-                  )
-                ]),
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 32,
-                      interval: 1,
-                      getTitlesWidget: (value, meta) {
-                        int index = value.toInt();
-                        if (index < labels.length) {
-                          return Text(labels[index], style: const TextStyle(fontSize: 10));
-                        }
-                        return const Text('');
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(showTitles: true, interval: 10),
-                  ),
-                  topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
-                gridData: FlGridData(show: true),
-                borderData: FlBorderData(show: true),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: true),
+                ),
+                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
               ),
+              borderData: FlBorderData(show: false),
+              minX: 0,
+              maxX: (spots.length - 1).toDouble(),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: true,
+                  color: Colors.deepPurpleAccent,
+                  barWidth: 4,
+                  belowBarData: BarAreaData(show: true, color: Colors.deepPurple.withOpacity(0.2)),
+                  dotData: FlDotData(
+                    show: true,
+                    getDotPainter: (spot, percent, barData, index) =>
+                        FlDotCirclePainter(radius: 4, color: Colors.deepPurple, strokeWidth: 1.5, strokeColor: Colors.white),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
+      ],
+    ),
+  );
+}
+
+Widget buildSmoothHumidityChart(List<FlSpot> spots, List<String> timestamps) {
+  return Container(
+    padding: const EdgeInsets.all(16),
+    margin: const EdgeInsets.symmetric(vertical: 8),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 4)),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Historial de Humedad',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 200,
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(show: false),
+              titlesData: FlTitlesData(
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 1,
+                    getTitlesWidget: (value, meta) {
+                      final index = value.toInt();
+                      if (index >= 0 && index < timestamps.length) {
+                        return Text(
+                          timestamps[index],
+                          style: const TextStyle(fontSize: 10),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: true),
+                ),
+                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              borderData: FlBorderData(show: false),
+              minX: 0,
+              maxX: (spots.length - 1).toDouble(),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: true,
+                  color: Colors.teal,
+                  barWidth: 4,
+                  belowBarData: BarAreaData(show: true, color: Colors.teal.withOpacity(0.2)),
+                  dotData: FlDotData(
+                    show: true,
+                    getDotPainter: (spot, percent, barData, index) =>
+                        FlDotCirclePainter(radius: 4, color: Colors.teal, strokeWidth: 1.5, strokeColor: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
+class ControlScreen extends StatefulWidget {
+  const ControlScreen({super.key});
+
+  @override
+  State<ControlScreen> createState() => _ControlScreenState();
+}
+
+class _ControlScreenState extends State<ControlScreen> {
+  bool state = true;
+  final String endpoint = 'flutter';
+
+  Future<void> sendState() async {
+    final response = await Uri.parse(endpoint);
+    try {
+      final res = await http.post(
+        response,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "pid": "2563552d-50c1-4ad8-932b-835056f85d01",
+          "state": state
+        }),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            state ? 'Actuador encendido' : 'Actuador apagado',
+            style: GoogleFonts.poppins(fontSize: 16),
+          ),
+          backgroundColor: state ? Colors.green : Colors.redAccent,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error de red: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFE8F5E9),
+      appBar: AppBar(
+        title: Text(
+          'Control Manual',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: const Color(0xFF388E3C),
+        centerTitle: true,
       ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 12,
+                  offset: Offset(0, 6),
+                )
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Control de Luz 💡',
+                  style: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF212121),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 30),
+                OnOffButton(
+                        initialState: state,
+                        onToggle: (value) {
+                          setState(() {
+                            state = value;
+                          });
+                        },
+                      ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: sendState,
+                  icon: const Icon(Icons.send, color: Colors.white),
+                  label: Text(
+                    'Enviar',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF388E3C),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 14.0, horizontal: 24.0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: buildBottomNavBar(context, 2),
+    );
+  }
+}
+
+class OnOffButton extends StatefulWidget {
+  final bool initialState;
+  final Function(bool) onToggle;
+
+  const OnOffButton({
+    super.key,
+    required this.initialState,
+    required this.onToggle,
+  });
+
+  @override
+  State<OnOffButton> createState() => _OnOffButtonState();
+}
+
+class _OnOffButtonState extends State<OnOffButton> {
+  late bool isOn;
+
+  @override
+  void initState() {
+    super.initState();
+    isOn = widget.initialState;
+  }
+
+  void toggleButton() {
+    setState(() {
+      isOn = !isOn;
+      widget.onToggle(isOn);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: toggleButton,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        width: 180,
+        height: 56,
+        decoration: BoxDecoration(
+          color: isOn ? Colors.green : Colors.red,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 6,
+              offset: Offset(0, 4),
+            )
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.centerLeft,
+          children: [
+            Positioned(
+              left: 24,
+              child: Text(
+                isOn ? 'ENCENDIDO' : 'APAGADO',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                width: 44,
+                height: 44,
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isOn ? Icons.power : Icons.power_off,
+                  color: isOn ? Colors.green : Colors.red,
+                ),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Widget buildBottomNavBar(BuildContext context, int currentIndex) {
+  return BottomNavigationBar(
+    currentIndex: currentIndex,
+    selectedItemColor: Colors.green,
+    items: const [
+      BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dashboard'),
+      BottomNavigationBarItem(icon: Icon(Icons.info), label: 'Detalle'),
+      BottomNavigationBarItem(icon: Icon(Icons.tune), label: 'Control'),
+    ],
+    onTap: (index) {
+      if (index == 0) {
+        Navigator.pushNamed(context, '/dashboard');
+      } else if (index == 1) {
+        Navigator.pushNamed(context, '/detalle');
+      } else if (index == 2) {
+        Navigator.pushNamed(context, '/control');
+      }
+    },
+  );
+}
+
+Widget buildStyledLineChart({
+  required List<FlSpot> spots,
+  required List<String> labels,
+  required String title,
+  required double maxLimit,
+  Color color = Colors.blueAccent,
+}) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.montserrat(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 220,
+          child: LineChart(
+            LineChartData(
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  tooltipBgColor: Colors.white,
+                  getTooltipItems: (touchedSpots) {
+                    return touchedSpots.map((spot) {
+                      return LineTooltipItem(
+                        '${spot.y.toStringAsFixed(1)}',
+                        GoogleFonts.robotoMono(fontSize: 14, color: Colors.black),
+                      );
+                    }).toList();
+                  },
+                ),
+              ),
+              lineBarsData: [
+                LineChartBarData(
+                  isCurved: true,
+                  spots: spots,
+                  color: color,
+                  dotData: FlDotData(show: true),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: color.withOpacity(0.2),
+                  ),
+                  barWidth: 3,
+                ),
+              ],
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 40,
+                    interval: 10,
+                    getTitlesWidget: (value, _) => Text(
+                      '${value.toInt()}',
+                      style: GoogleFonts.poppins(fontSize: 10),
+                    ),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    interval: 1,
+                    getTitlesWidget: (value, meta) {
+                      final index = value.toInt();
+                      return index < labels.length
+                          ? Transform.rotate(
+                              angle: 0, // ya no vertical
+                              child: Text(
+                                labels[index],
+                                style: GoogleFonts.poppins(fontSize: 10),
+                              ),
+                            )
+                          : const Text('');
+                    },
+                  ),
+                ),
+                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              extraLinesData: ExtraLinesData(horizontalLines: [
+                HorizontalLine(
+                  y: maxLimit,
+                  color: Colors.redAccent,
+                  strokeWidth: 2,
+                  dashArray: [4, 4],
+                  label: HorizontalLineLabel(
+                    show: true,
+                    labelResolver: (_) => 'Límite: $maxLimit',
+                    style: GoogleFonts.robotoMono(
+                        color: Colors.redAccent, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ]),
+              gridData: FlGridData(show: true, drawVerticalLine: false),
+              borderData: FlBorderData(
+                show: true,
+                border: const Border(
+                  left: BorderSide(),
+                  bottom: BorderSide(),
+                ),
+              ),
+              minX: 0,
+              maxX: (labels.length - 1).toDouble(),
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }
