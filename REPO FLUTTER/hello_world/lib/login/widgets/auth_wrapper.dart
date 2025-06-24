@@ -2,6 +2,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:hello_world/login/services/auth_service.dart';
 import 'package:hello_world/main.dart';
+import 'package:hello_world/farm/screens/user_farms_screen.dart';
+import 'package:hello_world/home/screens/main/main_wrapper.dart';
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
@@ -9,7 +11,7 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authService = AuthService();
-    
+
     return StreamBuilder<User?>(
       stream: authService.user,
       builder: (context, snapshot) {
@@ -18,21 +20,17 @@ class AuthWrapper extends StatelessWidget {
           if (user == null) {
             return const LoginScreen();
           }
-          
+
           // Verificar si el email está verificado
           if (!user.emailVerified) {
             return EmailVerificationScreen();
           }
-          
-          return const DashboardScreen();
+
+          return const MainWrapper();
         }
-        
+
         // Mientras se carga el estado de autenticación
-        return const Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
-          ),
-        );
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
     );
   }
@@ -40,7 +38,8 @@ class AuthWrapper extends StatelessWidget {
 
 class EmailVerificationScreen extends StatefulWidget {
   @override
-  _EmailVerificationScreenState createState() => _EmailVerificationScreenState();
+  _EmailVerificationScreenState createState() =>
+      _EmailVerificationScreenState();
 }
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
@@ -57,7 +56,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     try {
       await _authService.sendEmailVerification();
       setState(() {
-        _message = 'Email de verificación enviado. Por favor revisa tu bandeja de entrada.';
+        _message =
+            'Email de verificación enviado. Por favor revisa tu bandeja de entrada.';
       });
     } catch (e) {
       setState(() {
@@ -83,11 +83,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(
-              Icons.mark_email_unread,
-              size: 80,
-              color: Colors.green,
-            ),
+            const Icon(Icons.mark_email_unread, size: 80, color: Colors.green),
             const SizedBox(height: 24),
             const Text(
               'Verifica tu correo electrónico',
@@ -116,9 +112,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 backgroundColor: Colors.green,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
-              child: _isSending
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Reenviar correo de verificación'),
+              child:
+                  _isSending
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('Reenviar correo de verificación'),
             ),
             const SizedBox(height: 16),
             TextButton(

@@ -1,75 +1,82 @@
+// lib/sensor_service.dart
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-class SensorReading {
-  final String sensor; // Ej: "temperature" o "humidity"
-  final String value;
-  final String timestamp;
+class DashboardData {
+  final String displayDate;
+  final List<SensorReading> readings;
 
-  SensorReading({
-    required this.sensor,
-    required this.value,
-    required this.timestamp,
-  });
+  DashboardData({required this.displayDate, required this.readings});
 
-  // Constructor estático para construir desde un valor específico
-  factory SensorReading.fromValue({
-    required String sensor,
-    required dynamic value,
-    required String timestamp,
-  }) {
-    return SensorReading(
-      sensor: sensor,
-      value: value?.toString() ?? 'N/A',
-      timestamp: timestamp,
+  factory DashboardData.fromJson(Map<String, dynamic> json) {
+    var list = json['readings'] as List;
+    List<SensorReading> readingsList =
+        list.map((i) => SensorReading.fromJson(i)).toList();
+    return DashboardData(
+      displayDate: json['displayDate'] ?? 'Fecha no disponible',
+      readings: readingsList,
     );
   }
 }
 
+class SensorReading {
+  final String sensor;
+  final String value;
+  final String timestamp;
+
+  SensorReading(
+      {required this.sensor, required this.value, required this.timestamp});
+
+  factory SensorReading.fromJson(Map<String, dynamic> json) {
+    return SensorReading(
+      sensor: json['sensor'] ?? '',
+      value: json['value']?.toString() ?? '0',
+      timestamp: json['timestamp'] ?? '',
+    );
+  }
+}
 
 class SensorService {
-  static const String _baseUrl =
-      'https://list-sensor-readings-712174296076.northamerica-northeast1.run.app/readings';
+  static const String _baseUrl = 'https://list-sensor-readings-712174296076.northamerica-northeast1.run.app';
+  static const String _relayUrl = 'https://send-bool-acloud-712174296076.europe-west1.run.app';
 
-  static Future<List<SensorReading>> fetchSensorReadings() async {
-    final response = await http.get(Uri.parse(_baseUrl));
-
-    if (response.statusCode == 200) {
-      final jsonResponse = json.decode(response.body);
-      final List<dynamic> data = jsonResponse['data'];
-
-      List<SensorReading> readings = [];
-
-      for (var item in data) {
-        final timestamp = item['timestamp'];
-
-        if (item['temperature'] != null) {
-          readings.add(SensorReading.fromValue(
-              sensor: 'Temperatura',
-              value: item['temperature'],
-              timestamp: timestamp));
-        }
-
-        if (item['humidity'] != null) {
-          readings.add(SensorReading.fromValue(
-              sensor: 'Humedad',
-              value: item['humidity'],
-              timestamp: timestamp));
-        }
+  static Future<DashboardData> fetchSensorReadings(String deviceId) async {
+    // CORRECCIÓN: La URL base ya es el endpoint, no se necesita '/readings'.
+    // El parámetro 'id' se pasa directamente.
+    final uri = Uri.parse('$_baseUrl?id=$deviceId');
+    try {
+      final response = await http.get(uri);
+      if (response.statusCode == 200) {
+        return DashboardData.fromJson(json.decode(response.body));
+      } else {
+        print('Error en fetchSensorReadings: ${response.statusCode} ${response.body}');
+        throw Exception('No se pudo cargar los datos del sensor.');
       }
-
-      return readings;
-    } else {
-      throw Exception('Error al obtener datos del servidor');
+    } catch (e) {
+      print('Error en fetchSensorReadings: $e');
+      throw Exception('No se pudo conectar al servidor.');
     }
   }
 
-  static Future<List<SensorReading>> fetchDummySensorReadings() async {
-  await Future.delayed(const Duration(seconds: 1)); // Simula carga
-  return [
-    SensorReading(sensor: 'Temperatura', value: '32°C', timestamp: '2025-05-24 10:30'),
-    SensorReading(sensor: 'Humedad', value: '60%', timestamp: '2025-05-24 10:30'),
-    SensorReading(sensor: 'Luz', value: '180 lux', timestamp: '2025-05-24 10:30'),
-  ];
-}
+  static Future<void> updateRelayState(bool newState) async {
+    final headers = {'Content-Type': 'application/json'};
+    final body = json.encode({'state': newState});
+
+    try {
+      final response = await http.post(
+        Uri.parse(_relayUrl),
+        headers: headers,
+        body: body,
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Fallo al actualizar el relé: ${response.body}');
+      }
+      print('Relé actualizado a: $newState');
+    } catch (e) {
+      print('Error en updateRelayState: $e');
+      throw Exception('No se pudo conectar al servicio del relé.');
+    }
+  }
 }
